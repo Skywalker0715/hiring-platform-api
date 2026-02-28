@@ -1,0 +1,302 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                        String   @id @default(uuid())
+  email                     String   @unique @db.VarChar(255)
+  password_hash             String   @db.VarChar(255)
+  role                      String   @db.VarChar(20) // 'admin', 'recruiter', 'applicant', 'employee'
+  full_name                 String   @db.VarChar(255)
+  theme                     String?  @default("light") @db.VarChar(20) // 'light', 'dark', 'system'
+  language                  String?  @default("en") @db.VarChar(10) // 'en', 'id'
+  timezone                  String?  @default("Asia/Jakarta") @db.VarChar(50)
+  notification_preferences  Json?    @db.JsonB // {application_updates, interview_reminders, messages, system, sound}
+  reset_token               String?  @unique
+  reset_token_expires       DateTime?
+  created_at                DateTime @default(now()) @db.Timestamp()
+  updated_at                DateTime @default(now()) @updatedAt @db.Timestamp()
+
+  // Relations
+  jobs_created         Job[]              @relation("CreatedByUser")
+  applications         Application[]      @relation("ApplicantApplications")
+  applications_reviewed Application[]     @relation("ReviewedApplications")
+  applicant_profile    ApplicantProfile?
+  notifications        Notification[]
+  attendances          Attendance[]       @relation("UserAttendances")
+  attendances_approved Attendance[]       @relation("ApprovedAttendances")
+  uploads              Upload[]
+
+  @@index([email])
+  @@index([role])
+  @@map("users")
+}
+
+model Job {
+  id                  String    @id @default(uuid())
+  slug                String    @unique @db.VarChar(255)
+  created_by          String?
+  title               String    @db.VarChar(255)
+  description         String    @db.Text
+  department          String?   @db.VarChar(100)
+  status              String    @db.VarChar(20) // 'draft', 'published', 'closed'
+  salary_min          BigInt?
+  salary_max          BigInt?
+  currency            String?   @default("IDR") @db.VarChar(10)
+  display_salary      String?   @db.VarChar(100)
+  location            String?   @db.VarChar(255)
+  job_type            String?   @db.VarChar(50) // 'Full-time', 'Part-time', 'Contract', 'Internship'
+  responsibilities    Json?     @db.JsonB // Array of strings
+  requirements        Json?     @db.JsonB // Array of strings
+  qualifications      Json?     @db.JsonB // Array of strings
+  required_skills     Json?     @db.JsonB // Array of strings
+  company_info        Json?     @db.JsonB // {name, about, size, industry, website, location}
+  started_on          DateTime? @db.Timestamp()
+  created_at          DateTime  @default(now()) @db.Timestamp()
+  updated_at          DateTime  @default(now()) @updatedAt @db.Timestamp()
+
+  // Relations
+  creator               User?              @relation("CreatedByUser", fields: [created_by], references: [id])
+  job_configurations    JobConfiguration[]
+  applications          Application[]
+
+  @@index([slug])
+  @@index([status])
+  @@index([created_by])
+  @@index([job_type])
+  @@index([location])
+  @@map("jobs")
+}
+
+model JobConfiguration {
+  id          String   @id @default(uuid())
+  job_id      String
+  form_config Json?    @db.JsonB // Custom application form configuration
+  created_at  DateTime @default(now()) @db.Timestamp()
+  updated_at  DateTime @default(now()) @updatedAt @db.Timestamp()
+
+  // Relations
+  job Job @relation(fields: [job_id], references: [id], onDelete: Cascade)
+
+  @@map("job_configurations")
+}
+
+model Application {
+  id                  String    @id @default(uuid())
+  job_id              String
+  user_id             String
+  application_number  String?   @unique @db.VarChar(50)
+  status              String    @db.VarChar(20) // 'Applied', 'Screening', 'Interview', 'Offer', 'Rejected'
+  form_data           Json?     @db.JsonB // Application form submission data
+  applied_at          DateTime  @default(now()) @db.Timestamp()
+  reviewed_at         DateTime? @db.Timestamp()
+  reviewed_by         String?
+  notes               String?   @db.Text // Internal notes from recruiter
+  created_at          DateTime  @default(now()) @db.Timestamp()
+  updated_at          DateTime  @default(now()) @updatedAt @db.Timestamp()
+
+  // Relations
+  job       Job         @relation(fields: [job_id], references: [id], onDelete: Cascade)
+  user      User        @relation("ApplicantApplications", fields: [user_id], references: [id], onDelete: Cascade)
+  reviewer  User?       @relation("ReviewedApplications", fields: [reviewed_by], references: [id])
+  interviews Interview[]
+
+  @@index([job_id])
+  @@index([user_id])
+  @@index([status])
+  @@index([application_number])
+  @@index([applied_at])
+  @@map("applications")
+}
+
+model ApplicantProfile {
+  id                String    @id @default(uuid())
+  user_id           String    @unique
+  full_name         String    @db.VarChar(255)
+  email             String    @db.VarChar(255)
+  phone_number      String?   @db.VarChar(50)
+  gender            String?   @db.VarChar(20)
+  domicile          String?   @db.VarChar(100)
+  date_of_birth     DateTime? @db.Date
+  about_me          String?   @db.Text
+  photo_profile_url String?   @db.VarChar(500)
+  cv_url            String?   @db.VarChar(500)
+  linkedin_url      String?   @db.VarChar(500)
+  github_url        String?   @db.VarChar(500)
+  portfolio_url     String?   @db.VarChar(500)
+  created_at        DateTime  @default(now()) @db.Timestamp()
+  updated_at        DateTime  @default(now()) @updatedAt @db.Timestamp()
+
+  // Relations
+  user             User             @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  skills           Skill[]
+  work_experiences WorkExperience[]
+  educations       Education[]
+
+  @@index([user_id])
+  @@index([email])
+  @@map("applicant_profiles")
+}
+
+model Skill {
+  id                    String @id @default(uuid())
+  applicant_profile_id  String
+  skill_name            String @db.VarChar(100)
+  created_at            DateTime @default(now()) @db.Timestamp()
+
+  // Relations
+  profile ApplicantProfile @relation(fields: [applicant_profile_id], references: [id], onDelete: Cascade)
+
+  @@unique([applicant_profile_id, skill_name])
+  @@index([applicant_profile_id])
+  @@index([skill_name])
+  @@map("skills")
+}
+
+model WorkExperience {
+  id                    String    @id @default(uuid())
+  applicant_profile_id  String
+  job_title             String    @db.VarChar(255)
+  company               String    @db.VarChar(255)
+  location              String?   @db.VarChar(255)
+  start_date            DateTime  @db.Date
+  end_date              DateTime? @db.Date // NULL if is_current = true
+  is_current            Boolean   @default(false)
+  description           String?   @db.Text
+  created_at            DateTime  @default(now()) @db.Timestamp()
+  updated_at            DateTime  @default(now()) @updatedAt @db.Timestamp()
+
+  // Relations
+  profile ApplicantProfile @relation(fields: [applicant_profile_id], references: [id], onDelete: Cascade)
+
+  @@index([applicant_profile_id])
+  @@index([is_current])
+  @@index([start_date])
+  @@index([company])
+  @@map("work_experiences")
+}
+
+model Education {
+  id                    String    @id @default(uuid())
+  applicant_profile_id  String
+  degree                String    @db.VarChar(100) // 'SMA/SMK', 'D3', 'S1', 'S2', 'S3'
+  institution           String    @db.VarChar(255)
+  field_of_study        String    @db.VarChar(255)
+  start_date            DateTime  @db.Date
+  end_date              DateTime? @db.Date // NULL if is_current = true
+  is_current            Boolean   @default(false)
+  gpa                   String?   @db.VarChar(20)
+  description           String?   @db.Text
+  created_at            DateTime  @default(now()) @db.Timestamp()
+  updated_at            DateTime  @default(now()) @updatedAt @db.Timestamp()
+
+  // Relations
+  profile ApplicantProfile @relation(fields: [applicant_profile_id], references: [id], onDelete: Cascade)
+
+  @@index([applicant_profile_id])
+  @@index([degree])
+  @@index([institution])
+  @@index([is_current])
+  @@map("education")
+}
+
+model Interview {
+  id                String    @id @default(uuid())
+  application_id    String
+  scheduled_date    DateTime  @db.Date
+  scheduled_time    String    @db.VarChar(50) // '10:00 AM - 11:00 AM'
+  interview_type    String    @db.VarChar(20) // 'onsite', 'video', 'phone'
+  location          String?   @db.VarChar(255) // Physical address for onsite
+  meeting_link      String?   @db.VarChar(500) // Zoom/Google Meet link
+  interviewer_name  String?   @db.VarChar(255)
+  interviewer_title String?   @db.VarChar(255)
+  status            String    @default("scheduled") @db.VarChar(20) // 'scheduled', 'completed', 'cancelled', 'rescheduled'
+  notes             String?   @db.Text // Interview feedback or notes
+  created_at        DateTime  @default(now()) @db.Timestamp()
+  updated_at        DateTime  @default(now()) @updatedAt @db.Timestamp()
+
+  // Relations
+  application Application @relation(fields: [application_id], references: [id], onDelete: Cascade)
+
+  @@index([application_id])
+  @@index([scheduled_date])
+  @@index([status])
+  @@index([interview_type])
+  @@map("interviews")
+}
+
+model Notification {
+  id          String   @id @default(uuid())
+  user_id     String
+  type        String   @db.VarChar(50) // 'application_update', 'interview_reminder', 'message_from_admin', 'system'
+  title       String   @db.VarChar(255)
+  message     String   @db.Text
+  action_url  String?  @db.VarChar(500) // Deep link to related page
+  sender      String?  @db.VarChar(255) // Name of admin/recruiter who sent
+  is_read     Boolean  @default(false)
+  created_at  DateTime @default(now()) @db.Timestamp()
+
+  // Relations
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
+  @@index([is_read])
+  @@index([created_at])
+  @@index([type])
+  @@index([user_id, is_read])
+  @@map("notifications")
+}
+
+
+model Attendance {
+  id                   String    @id @default(uuid())
+  user_id              String
+  attendance_date      DateTime  @db.Date
+  check_in_time        DateTime? @db.Timestamp()
+  check_in_photo_url   String?   @db.VarChar(500)
+  check_in_method      String?   @db.VarChar(20) // 'manual', 'auto_finger1', 'auto_finger2', 'auto_face'
+  check_out_time       DateTime? @db.Timestamp()
+  check_out_photo_url  String?   @db.VarChar(500)
+  check_out_method     String?   @db.VarChar(20)
+  status               String    @default("present") @db.VarChar(20) // 'present', 'late', 'absent', 'half_day', 'leave'
+  location_lat         Decimal?  @db.Decimal(10, 8)
+  location_lng         Decimal?  @db.Decimal(11, 8)
+  notes                String?   @db.Text
+  approved_by          String?
+  created_at           DateTime  @default(now()) @db.Timestamp()
+  updated_at           DateTime  @default(now()) @updatedAt @db.Timestamp()
+
+  // Relations
+  user     User  @relation("UserAttendances", fields: [user_id], references: [id], onDelete: Cascade)
+  approver User? @relation("ApprovedAttendances", fields: [approved_by], references: [id])
+
+  @@unique([user_id, attendance_date])
+  @@index([user_id])
+  @@index([attendance_date])
+  @@index([status])
+  @@index([check_in_time])
+  @@map("attendances")
+}
+
+model Upload {
+  id        String   @id @default(uuid())
+  filename  String   @db.VarChar(255)
+  path      String   @db.VarChar(500) // Full path or URL to the stored file
+  mimetype  String   @db.VarChar(100)
+  size      Int
+  user_id   String? // Optional: if uploads are associated with a user
+  created_at DateTime @default(now())
+  updated_at DateTime @default(now()) @updatedAt
+
+  user      User?    @relation(fields: [user_id], references: [id]) // Relation to User model
+  
+  @@map("uploads")
+}
