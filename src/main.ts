@@ -17,5 +17,5 @@ async function bootstrap() {
 }
 bootstrap();
 
-await app.listen(process.env.PORT ?? 10000, '0.0.0.0');
+
 
