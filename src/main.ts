@@ -13,7 +13,7 @@ async function bootstrap() {
     }),
   );
   app.useGlobalInterceptors(new BigIntInterceptor());
-  await app.listen(process.env.PORT ?? 3000);
+  await app.listen(process.env.PORT ?? 10000, '0.0.0.0');
 }
 bootstrap();
 
